@@ -18,10 +18,11 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
+#include <math.h>
+//#include "sterowanie_servo.c"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "ADXL.h"
+
 
 /* USER CODE END Includes */
 
@@ -46,6 +47,7 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
+float pulse ;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -95,14 +97,6 @@ int main(void)
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start (&htim3, TIM_CHANNEL_3);
-  adxl_write(0x2d, 0x00);
-  adxl_write(0x2d, 0x08);
-  adxl_write(0x31, 0x01);
-  adxl_read_values(0x32);
-  auto x = ((data_rec[1]<<8)|data_rec[0]);
-  auto y = ((data_rec[3]<<8)|data_rec[2]);
-  auto z = ((data_rec[5]<<8)|data_rec[4]);
-
 
 
   /* USER CODE END 2 */
@@ -112,18 +106,16 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
-//	  for (int i = 500; i < 2400; i = i + 1)
-//	  {
-//		  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, i);
-//		  HAL_Delay(2);
-//	  }
-//	  for (int i = 2400; i > 500; i = i - 1)
-//	  {
-//		  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, i);
-//		  HAL_Delay(2);
-//	  }
+
+	  for (int i = 1; i < 180; i = i + 1)
+	  {
+		  ruch(i,1);
+	  }
+	  for (int i = 180; i > 0; i = i - 1)
+	  {
+		  ruch(i,1);
+	  }
 
   }
   /* USER CODE END 3 */
@@ -301,10 +293,11 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void adxl_read_values(uint8_t reg)
+void ruch(int degree, uint8_t timestop)
 {
-	HAL_I2C_Mem_Read(&hi2c1, adxl_address, reg, 1, (uint8_t *)data_rec, 6, 100);
-
+	pulse = ((degree/180.0)*2400.0)+500.0;
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, round(pulse) ) ;
+	HAL_Delay(timestop);
 }
 
 /* USER CODE END 4 */
