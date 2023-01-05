@@ -18,7 +18,10 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
+#include "ssd1306.h"
+#include "fonts.h"
+#include "test.h"
+#include <math.h>
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -41,6 +44,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c2;
 
 TIM_HandleTypeDef htim3;
 
@@ -58,12 +62,39 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
 /////////////////////////////
 uint8_t data_rec[6];
-uint8_t x,y,z;
+uint8_t x, y, z;
+float Rx, Ry, Rz, xg, yg, zg, roll, pitch;
+char xch[3];
+char ych[3];
+char zch[3];
 ////////////////////////////
 //////////////////////////OLED////////////////////////////////
+void wyswietlanie(float xd, float yd)
+{
+    SSD1306_GotoXY(16,1);
+    SSD1306_Puts("X: ",&Font_11x18, 1);
+    SSD1306_GotoXY(32,1);
+    sprintf (xch,"% 4f",xd);
+    SSD1306_Puts (xch, &Font_11x18,1);
+
+    SSD1306_GotoXY(16,20);
+    SSD1306_Puts("Y: ",&Font_11x18, 1);
+    SSD1306_GotoXY(32,20);
+    sprintf (ych,"% 4f",yd);
+    SSD1306_Puts (ych, &Font_11x18,1);
+
+//    SSD1306_GotoXY(16,40);
+//    SSD1306_Puts("Z: ",&Font_11x18, 1);
+//    SSD1306_GotoXY(32,40);
+//    sprintf (zch,"% 4f",zd);
+//    SSD1306_Puts (zch, &Font_11x18,1);
+
+    SSD1306_UpdateScreen();
+}
 
 //////////////////////////ADXL////////////////////////////////
 void adxl_write(uint8_t reg, uint8_t value)
@@ -87,6 +118,36 @@ void adxl_init (void)
 
 	adxl_write (0x31, 0x01); //+-4g zakres
 }
+void odczyt()
+{
+	//float G_EARTH = 9.81;
+	adxl_read (0x32, 6);
+	x = (data_rec[1]<<8) | data_rec[0];
+	y = (data_rec[3]<<8) | data_rec[2];
+	z = (data_rec[5]<<8) | data_rec[4];
+	//float r = sqrt(x*x + y*y + z*z);
+	xg = x*0.0078;
+	yg = y*0.0078;
+	zg = z*0.0078;
+	//Rx = x/255.0;
+	//Ry = y/255.0;
+	//Rz = z/255.0;
+
+	//Rx = atan(yg / sqrt(pow(xg, 2) + pow(zg, 2))) * 180 / M_PI;
+	//Ry = atan(-1 * xg / sqrt(pow(yg, 2) + pow(zg, 2))) * 180 / M_PI;
+
+	//Rx = x * (  (2 * G_EARTH) / 512     ) ;
+	//Ry = y * (  (2 * G_EARTH) / 512     ) ;
+	//Rz = z * (  (2 * G_EARTH) / 512     ) ;
+
+	  //Roll & Pitch Equations
+	//roll  = (atan2(-Ry, Rz)*180.0)/M_PI;
+	//pitch = (atan2(Rx, sqrt(Ry*Ry + Rz*Rz))*180.0)/M_PI;
+	//roll   = 180/M_PI * ( M_PI/2 - (acos(y/r) ) );
+	//pitch  = 180/M_PI * ( M_PI/2 - (acos(x/r) ) );
+	HAL_Delay(20);
+}
+
 ///////////////////////////////////////////////////////////////////////////
 /* USER CODE END PFP */
 
@@ -127,9 +188,11 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM3_Init();
   MX_I2C1_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start (&htim3, TIM_CHANNEL_3);
   adxl_init();
+  SSD1306_Init();
 
   /* USER CODE END 2 */
 
@@ -140,11 +203,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  adxl_read (0x32, 6);
-	  x = (data_rec[1]<<8) | data_rec[0];
-	  y = (data_rec[3]<<8) | data_rec[2];
-	  z = (data_rec[5]<<8) | data_rec[4];
-	  HAL_Delay(10);
+	  odczyt();
+	  ruch(20, 1);
+	  wyswietlanie(xg,yg);
 //	  for (int i = 1; i < 180; i = i + 1)
 //	  {
 //		  ruch(i,1);
@@ -249,6 +310,54 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.Timing = 0x2010091A;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c2, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c2, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
 
 }
 
