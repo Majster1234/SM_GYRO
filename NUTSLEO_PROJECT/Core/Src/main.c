@@ -66,11 +66,13 @@ static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
 /////////////////////////////
 uint8_t data_rec[6];
-uint8_t x, y, z;
-float Rx, Ry, Rz, xg, yg, zg, roll, pitch;
+int16_t x, y, z;
+float Rx, Ry, Rz, xg, yg, zg;
 char xch[3];
 char ych[3];
 char zch[3];
+float u = 0, e0 = 0, e1 = 0, up = 0, ui = 0, ui2 = 0, ud = 0;
+float degree = 0;
 ////////////////////////////
 //////////////////////////OLED////////////////////////////////
 void wyswietlanie(float xd, float yd)
@@ -116,38 +118,53 @@ void adxl_init (void)
 	adxl_write (0x2d,0);     //resetowanie wszystkich bitów
 	adxl_write (0x2d, 0x08); //inicjalizacja pomiarów
 
-	adxl_write (0x31, 0x01); //+-4g zakres
+	adxl_write (0x31, 0x00); //+-4g zakres
 }
 void odczyt()
 {
-	//float G_EARTH = 9.81;
+
 	adxl_read (0x32, 6);
-	x = (data_rec[1]<<8) | data_rec[0];
-	y = (data_rec[3]<<8) | data_rec[2];
-	z = (data_rec[5]<<8) | data_rec[4];
-	//float r = sqrt(x*x + y*y + z*z);
-	xg = x*0.0078;
-	yg = y*0.0078;
-	zg = z*0.0078;
+	x = (int16_t)((data_rec[1]<<8) | data_rec[0]);
+	y = (int16_t)((data_rec[3]<<8) | data_rec[2]);
+	z = (int16_t)((data_rec[5]<<8) | data_rec[4]);
+	xg = x;//*0.0078;
+	yg = y;//*0.0078;
+	zg = z;//*0.0078;
 	//Rx = x/255.0;
 	//Ry = y/255.0;
 	//Rz = z/255.0;
-
-	//Rx = atan(yg / sqrt(pow(xg, 2) + pow(zg, 2))) * 180 / M_PI;
-	//Ry = atan(-1 * xg / sqrt(pow(yg, 2) + pow(zg, 2))) * 180 / M_PI;
-
-	//Rx = x * (  (2 * G_EARTH) / 512     ) ;
-	//Ry = y * (  (2 * G_EARTH) / 512     ) ;
-	//Rz = z * (  (2 * G_EARTH) / 512     ) ;
-
-	  //Roll & Pitch Equations
-	//roll  = (atan2(-Ry, Rz)*180.0)/M_PI;
-	//pitch = (atan2(Rx, sqrt(Ry*Ry + Rz*Rz))*180.0)/M_PI;
-	//roll   = 180/M_PI * ( M_PI/2 - (acos(y/r) ) );
-	//pitch  = 180/M_PI * ( M_PI/2 - (acos(x/r) ) );
-	HAL_Delay(20);
+	Rx = atan(yg / sqrt(pow(xg, 2) + pow(zg, 2))) * 180 / M_PI;
+	Rx = round(Rx*10)/10;
+	Ry = atan(-1 * xg / sqrt(pow(yg, 2) + pow(zg, 2))) * 180 / M_PI;
+	Ry = round(Ry*10)/10;
+	HAL_Delay(10);
 }
+void PID(int yr, float y, float Tp, float Kp, float Ki, float Kd)
+{
+	e1 = yr-round(y);
+	up = Kp*e1;
+	ui2 = ((2*ui)+(Ki*Tp*(e1 + e0)))/2;
+	ud = (Kd*(e1-e0))/Tp;
+	u = up + ui2 + ud;
+	if (u > 90)
+	{
+		u = 90;
+	}
+	if (u < -90)
+	{
+		u = -90;
+	}
+	ui = ui2;
+	e0 = e1;
 
+	return u;
+}
+void ruch(float degree, uint8_t timestop)
+	  {
+	  	pulse = ((degree/180.0)*2400.0)+500.0;
+	  	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, round(pulse) ) ;
+	  	HAL_Delay(timestop);
+	  }
 ///////////////////////////////////////////////////////////////////////////
 /* USER CODE END PFP */
 
@@ -203,9 +220,30 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+
 	  odczyt();
-	  ruch(20, 1);
-	  wyswietlanie(xg,yg);
+	  wyswietlanie(Rx,Ry);
+
+	  if(!HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13))
+	  {
+		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+		  ruch((45),1);
+		  u = 0;
+		  HAL_Delay(10000);
+	  }
+	  else
+	  {
+	  PID(0,Ry,0.03,0.1,13,0);
+	  ruch((u + 90),1);
+	  }
+
+
+	  //ruch((45),1);
+
+
+
+	  //ruch(20,1);
 //	  for (int i = 1; i < 180; i = i + 1)
 //	  {
 //		  ruch(i,1);
@@ -489,12 +527,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void ruch(int degree, uint8_t timestop)
-{
-	pulse = ((degree/180.0)*2400.0)+500.0;
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, round(pulse) ) ;
-	HAL_Delay(timestop);
-}
+
 
 /* USER CODE END 4 */
 
