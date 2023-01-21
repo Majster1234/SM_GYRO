@@ -18,14 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
 #include "ssd1306.h"
 #include "fonts.h"
 #include "test.h"
 #include <math.h>
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,13 +45,14 @@
 I2C_HandleTypeDef hi2c1;
 I2C_HandleTypeDef hi2c2;
 
+TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
-float pulse ;
+
 #define adxl_adress 0x53<<1
 /* USER CODE END PV */
 
@@ -63,6 +63,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2C2_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 /////////////////////////////
 uint8_t data_rec[6];
@@ -71,8 +72,12 @@ float Rx, Ry, Rz, xg, yg, zg;
 char xch[3];
 char ych[3];
 char zch[3];
-float u = 0, e0 = 0, e1 = 0, up = 0, ui = 0, ui2 = 0, ud = 0;
-float degree = 0;
+float uy = 0, e0 = 0, e1 = 0, up = 0, ui = 0, ui2 = 0, ud = 0;
+float ux = 0, e0x = 0, e1x = 0, upx = 0, uix = 0, ui2x = 0, udx = 0;
+float degreex = 0.0;
+float degreey = 0.0;
+float pulsex = 0.0 ;
+float pulsey = 0.0 ;
 ////////////////////////////
 //////////////////////////OLED////////////////////////////////
 void wyswietlanie(float xd, float yd)
@@ -139,31 +144,62 @@ void odczyt()
 	Ry = round(Ry*10)/10;
 	HAL_Delay(10);
 }
-void PID(int yr, float y, float Tp, float Kp, float Ki, float Kd)
+	float duy=0;
+void PIDY(int yr, float y, float Tp, float Kp, float Ki, float Kd, float sat, float ksat)
 {
+	float uysat = 0;
+
 	e1 = yr-round(y);
 	up = Kp*e1;
 	ui2 = ((2*ui)+(Ki*Tp*(e1 + e0)))/2;
 	ud = (Kd*(e1-e0))/Tp;
-	u = up + ui2 + ud;
-	if (u > 90)
+	uy = up + ui2 + ud;
+	if (uy > 90)
 	{
-		u = 90;
+		uy = 90;
 	}
-	if (u < -90)
+	if (uy < -90)
 	{
-		u = -90;
+		uy = -90;
 	}
 	ui = ui2;
 	e0 = e1;
 
-	return u;
+	return uy;
 }
-void ruch(float degree, uint8_t timestop)
+void PIDX(int yrx, float yx, float Tpx, float Kpx, float Kix, float Kdx)
+{
+	e1x = yrx-round(yx);
+	upx = Kpx*e1x;
+	ui2x = ((2*uix)+(Kix*Tpx*(e1x + e0x)))/2;
+	udx = (Kdx*(e1x-e0x))/Tpx;
+	ux = upx + ui2x + udx;
+	if (ux > 90)
+	{
+		ux = 90;
+	}
+	if (ux < -90)
+	{
+		ux = -90;
+	}
+	uix = ui2x;
+	e0x = e1x;
+
+	return ux;
+}
+
+void ruchy(float degreex, uint8_t timestopx)
 	  {
-	  	pulse = ((degree/180.0)*2400.0)+500.0;
-	  	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, round(pulse) ) ;
-	  	HAL_Delay(timestop);
+	  	pulsex = ((degreex/180.0)*2400.0)+500.0;
+	    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, round(pulsex) ) ;
+	  	HAL_Delay(timestopx);
+	  }
+
+void obrotx(float degreey, uint8_t timestopy)
+	  {
+	  	pulsey = ((degreey/180.0)*2400.0)+500.0;
+	    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, round(pulsey) ) ;
+	  	HAL_Delay(timestopy);
 	  }
 ///////////////////////////////////////////////////////////////////////////
 /* USER CODE END PFP */
@@ -206,8 +242,10 @@ int main(void)
   MX_TIM3_Init();
   MX_I2C1_Init();
   MX_I2C2_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start (&htim3, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start (&htim1, TIM_CHANNEL_1);
   adxl_init();
   SSD1306_Init();
 
@@ -228,14 +266,19 @@ int main(void)
 	  if(!HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13))
 	  {
 		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-		  ruch((45),1);
-		  u = 0;
+		  ruchy((45),1);
+		  obrotx((45),1);
+		  ux = 0;
+		  uy = 0;
 		  HAL_Delay(10000);
 	  }
 	  else
 	  {
-	  PID(0,Ry,0.03,0.1,13,0);
-	  ruch((u + 90),1);
+	  PIDX(0,Rx,0.03,0.01,7,0);
+	  PIDY(0,Ry,0.03,0.01,7,0,0,0);
+	  ruchy((uy + 90),1);
+	  obrotx((ux + 90),1);
+	  printf(Rx);
 	  }
 
 
@@ -400,6 +443,81 @@ static void MX_I2C2_Init(void)
 }
 
 /**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 48;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 19999;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 1000;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+  HAL_TIM_MspPostInit(&htim1);
+
+}
+
+/**
   * @brief TIM3 Initialization Function
   * @param None
   * @retval None
@@ -444,7 +562,7 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 1766;
+  sConfigOC.Pulse = 1000;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
